@@ -1,0 +1,26 @@
+eureka:
+  client:
+    enabled: false
+
+spring:
+  cloud:
+    discovery:
+      enabled: false
+    gateway:
+      enabled: false
+  security:
+    oauth2:
+      client:
+        registration:
+          elearn-core-client:
+            client-id: test-client
+            client-secret: test-secret
+      resourceserver:
+        jwt:
+          issuer-uri: http://localhost:8080/auth/realms/tcnw-elearn
+
+app:
+  config:
+    keycloak:
+      url: http://localhost:8080/auth
+      realm: tcnw-elearn

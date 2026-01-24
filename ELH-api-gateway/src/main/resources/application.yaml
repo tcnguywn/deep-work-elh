@@ -1,0 +1,74 @@
+spring:
+  application:
+    name: ELH-api-gateway
+
+  cloud:
+    inetutils:
+      preferred-networks: 127.0.0.1
+    gateway:
+      discovery:
+        locator:
+          enabled: true # Cho phép tự động tìm service qua Eureka
+          lower-case-service-id: true
+      routes :
+        # Route 1: User Service (Đăng ký, Profile)
+        - id: elh-user-service
+          uri: lb://ELH-USER-SERVICE
+          predicates:
+            - Path=/api/v1/users/**
+
+        # Route 2: Task Service (Danh sách khóa học)
+        - id: elh-task-service
+          uri: lb://ELH-TASK-SERVICE
+          predicates:
+            - Path=/api/v1/task-service/**
+
+        # Route 3: Content Service (Nội dung bài học)
+        - id: content-service
+          uri: lb://content-service
+          predicates:
+            - Path=/api/v1/contents/**
+
+        # Route 4: Progress Service (Tiến độ)
+        - id: progress-service
+          uri: lb://progress-service
+          predicates:
+            - Path=/api/v1/progress/**
+  security:
+    oauth2:
+      client:
+        provider:
+          keycloak:
+            token-uri: ${app.config.keycloak.url}/realms/${app.config.keycloak.realm}/protocol/openid-connect/token
+            authorization-uri: ${app.config.keycloak.url}/realms/${app.config.keycloak.realm}/protocol/openid-connect/auth
+            user-name-attribute: preferred_username
+            user-info-uri: ${app.config.keycloak.url}/realms/${app.config.keycloak.realm}/protocol/openid-connect/userinfo
+            jwk-set-uri: ${app.config.keycloak.url}/realms/${app.config.keycloak.realm}/protocol/openid-connect/certs
+            user-info-authentication-method: header
+        registration:
+          elearn-core-client:
+            provider: keycloak
+            client-id: elearn-core-client
+            client-secret: X8BSOiwY6lryIDCFioFDtsIvGnEXXQu2
+            authorization-grant-type: authorization_code
+            redirect-uri: http://localhost:8080/login/oauth2/code/keycloak
+            scope: openid
+      resourceserver:
+        jwt:
+          jwk-set-uri: ${app.config.keycloak.url}/realms/${app.config.keycloak.realm}/protocol/openid-connect/certs
+
+server:
+  port: 8082
+
+eureka:
+  client:
+    service-url:
+      defaultZone: http://localhost:8081/eureka
+
+#SECURITY BASED CONFIGURATIONS
+app:
+  config:
+    keycloak:
+      url: http://localhost:8080
+      realm: tcnw-elearn
+
