@@ -1,0 +1,43 @@
+spring:
+  application:
+    name: ELH-NOTE-SERVICE
+  datasource:
+    url: jdbc:postgresql://localhost:5432/elh_note
+    username: postgres
+    password: root
+    driver-class-name: org.postgresql.Driver
+    jpa:
+      hibernate:
+        ddl-auto: validate
+      show-sql: true
+      properties:
+        hibernate:
+          dialect: org.hibernate.dialect.PostgreSQLDialect
+    flyway:
+      enabled: true
+      baseline-on-migrate: true
+      locations: classpath:db/migration
+  cloud:
+    inetutils:
+      preferred-networks: 127.0.0.1
+  security:
+    oauth2:
+      resourceserver:
+        jwt:
+          issuer-uri: http://localhost:8080/realms/tcnw-elearn
+          # Hoặc dùng jwk-set-uri trực tiếp:
+          # jwk-set-uri: http://localhost:8080/auth/realms/tcnw-elearn/protocol/openid-connect/certs
+server:
+  port: 8086
+
+app:
+  config:
+    keycloak:
+      url: http://localhost:8080/auth
+      realm: tcnw-elearn
+
+
+eureka:
+  client:
+    service-url:
+      defaultZone: http://localhost:8081/eureka
