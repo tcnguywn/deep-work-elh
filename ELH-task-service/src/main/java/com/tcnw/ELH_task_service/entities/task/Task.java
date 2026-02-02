@@ -37,8 +37,13 @@ public class Task extends BaseEntity {
     @Builder.Default
     private TaskStatus status = TaskStatus.TODO;
 
+
+
     @Column(name = "due_date")
     private LocalDateTime dueDate;
+
+    @Column(name = "spent_time_minutes")
+    private Integer spentTimeMinutes = 0;
 
     @Column(name = "estimated_time_minutes")
     private Integer estimatedTimeMinutes;

@@ -24,6 +24,7 @@ public class TaskDTO {
     private TaskStatus status;     // TODO, IN_PROGRESS, DONE
 
     private LocalDateTime dueDate;
+    private Integer spentTimeMinutes;
     private Integer estimatedTimeMinutes;
     private LocalDateTime completedAt;
 

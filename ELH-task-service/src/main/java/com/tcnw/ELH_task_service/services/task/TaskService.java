@@ -1,6 +1,5 @@
 package com.tcnw.ELH_task_service.services.task;
 
-
 import com.tcnw.ELH_task_service.dtos.task.CalendarEventDTO;
 import com.tcnw.ELH_task_service.dtos.task.TaskDTO;
 import com.tcnw.ELH_task_service.dtos.task.TaskFilterRequest;
@@ -20,6 +19,7 @@ import org.springframework.data.domain.Pageable;
 import org.springframework.data.jpa.domain.Specification;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+import org.springframework.util.StringUtils; // Import thêm cái này
 
 import java.time.LocalDateTime;
 import java.util.ArrayList;
@@ -65,6 +65,9 @@ public class TaskService {
 
         if (task.getStatus() == null) task.setStatus(TaskStatus.TODO);
 
+        // Fix nhỏ: Mặc định spentTime là 0 để tránh null pointer khi tính toán sau này
+        if (task.getSpentTimeMinutes() == null) task.setSpentTimeMinutes(0);
+
         Task savedTask = taskRepository.save(task);
         return modelMapper.map(savedTask, TaskDTO.class);
     }
@@ -74,37 +77,53 @@ public class TaskService {
         Task task = taskRepository.findByIdAndUserId(taskId, userId)
                 .orElseThrow(() -> new EntityNotFoundException("Task not found"));
 
-        // Update các trường cơ bản
-        task.setTitle(dto.getTitle());
-        task.setDescription(dto.getDescription());
-        task.setPriority(dto.getPriority());
-        task.setDueDate(dto.getDueDate());
-        task.setEstimatedTimeMinutes(dto.getEstimatedTimeMinutes());
+        if (StringUtils.hasText(dto.getTitle())) {
+            task.setTitle(dto.getTitle());
+        }
 
-        // Update Status & Completed At
-        if (dto.getStatus() != null) {
+        if (dto.getDescription() != null) {
+            task.setDescription(dto.getDescription());
+        }
+
+        if (dto.getPriority() != null) {
+            task.setPriority(dto.getPriority());
+        }
+
+        if (dto.getDueDate() != null) {
+            task.setDueDate(dto.getDueDate());
+        }
+
+        if (dto.getEstimatedTimeMinutes() != null) {
+            task.setEstimatedTimeMinutes(dto.getEstimatedTimeMinutes());
+        }
+
+        // --- LOGIC TRẠNG THÁI & KÉO THẢ ---
+        if (dto.getStatus() != null && dto.getStatus() != task.getStatus()) {
             task.setStatus(dto.getStatus());
-            if (dto.getStatus() == TaskStatus.DONE && task.getCompletedAt() == null) {
+
+            // Tự động set ngày hoàn thành khi kéo sang DONE
+            if (dto.getStatus() == TaskStatus.DONE) {
                 task.setCompletedAt(LocalDateTime.now());
-            } else if (dto.getStatus() != TaskStatus.DONE) {
+            }
+            // Nếu kéo ngược từ DONE về TODO/IN_PROGRESS thì xóa ngày hoàn thành
+            else if (task.getCompletedAt() != null) {
                 task.setCompletedAt(null);
             }
         }
 
-        // Update Project Relation
+        // --- RELATIONSHIPS ---
+
         if (dto.getProjectId() != null) {
-            // Nếu có gửi projectId -> tìm và gán
-            if (task.getProject() == null || !task.getProject().getId().equals(dto.getProjectId())) {
+            if (dto.getProjectId() == 0) {
+                task.setProject(null);
+            } else if (task.getProject() == null || !task.getProject().getId().equals(dto.getProjectId())) {
                 Project project = projectRepository.findByIdAndUserId(dto.getProjectId(), userId)
                         .orElseThrow(() -> new EntityNotFoundException("Project not found"));
                 task.setProject(project);
             }
-        } else {
-            // Nếu gửi null -> Gỡ task khỏi project
-            task.setProject(null);
         }
 
-        // Update Tags Relation
+        // Update Tags: Chỉ update nếu list tagIds được gửi lên (kể cả list rỗng để xóa hết tag)
         if (dto.getTagIds() != null) {
             List<Tag> tags = tagRepository.findAllByIdInAndUserId(dto.getTagIds(), userId);
             task.setTags(tags);
@@ -123,21 +142,14 @@ public class TaskService {
 
 
     public List<CalendarEventDTO> getTasksForCalendar(String userId, LocalDateTime start, LocalDateTime end) {
-        // 1. Query Database (Hàm này đã viết ở bước trước)
         List<Task> tasks = taskRepository.findAllByUserIdAndDueDateBetween(userId, start, end);
-
-        // 2. Map sang DTO chuẩn hiển thị Calendar
         return tasks.stream().map(task -> {
-            // Tính toán thời gian kết thúc
             LocalDateTime endTime = task.getDueDate();
             if (task.getEstimatedTimeMinutes() != null && task.getEstimatedTimeMinutes() > 0) {
                 endTime = task.getDueDate().plusMinutes(task.getEstimatedTimeMinutes());
             } else {
-                // Nếu không có thời gian ước lượng, mặc định là sự kiện 1 tiếng hoặc hiển thị dạng dot
                 endTime = task.getDueDate().plusHours(1);
             }
-
-            // Lấy màu: Ưu tiên màu dự án, nếu không có thì mặc định xanh
             String eventColor = (task.getProject() != null && task.getProject().getColor() != null)
                     ? task.getProject().getColor()
                     : "#3788d8";
@@ -148,7 +160,7 @@ public class TaskService {
                     .start(task.getDueDate())
                     .end(endTime)
                     .color(eventColor)
-                    .allDay(false) // Tạm thời để false, nếu muốn làm tính năng "Task cả ngày" thì check logic ở đây
+                    .allDay(false)
                     .description(task.getDescription())
                     .status(task.getStatus().name())
                     .build();
@@ -164,11 +176,22 @@ public class TaskService {
     }
 
     public Page<TaskDTO> getTasks(String userId, TaskFilterRequest filterRequest, Pageable pageable) {
-
         Specification<Task> spec = TaskSpecification.getFilterSpec(userId, filterRequest);
-
         Page<Task> tasksPage = taskRepository.findAll(spec, pageable);
-
         return tasksPage.map(task -> modelMapper.map(task, TaskDTO.class));
+    }
+
+    @Transactional
+    public void updateTaskTime(String userId, Long taskId, int minutesToAdd) {
+        Task task = taskRepository.findByIdAndUserId(taskId, userId)
+                .orElseThrow(() -> new EntityNotFoundException("Task not found"));
+
+        int currentSpent = task.getSpentTimeMinutes() == null ? 0 : task.getSpentTimeMinutes();
+        task.setSpentTimeMinutes(currentSpent + minutesToAdd);
+
+        if (task.getStatus() == TaskStatus.TODO) {
+            task.setStatus(TaskStatus.IN_PROGRESS);
+        }
+        taskRepository.save(task);
     }
 }
